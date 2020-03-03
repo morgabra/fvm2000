@@ -32,7 +32,7 @@ func (f *Fvm) newTable() {
 
 func (f *Fvm) Read(addr byte) byte {
 	switch {
-	case addr < 0xFF:
+	case addr <= 0xFF:
 		return f.ram[addr]
 
 	default:
@@ -49,7 +49,7 @@ func (f *Fvm) Read16(addr byte) uint16 {
 
 func (f *Fvm) Write(addr byte, value byte) {
 	switch {
-	case addr < 0xFF:
+	case addr <= 0xFF:
 		f.ram[addr] = value
 
 	default:
