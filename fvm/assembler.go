@@ -33,7 +33,7 @@ func parseAsm(p string) []byte {
 
 		if loc, ok := labels[t]; ok {
 			switch compiled[idx-1] {
-			case BNE:
+			case BNE, JSR:
 				compiled[idx] = loc
 				continue
 
@@ -55,13 +55,13 @@ func parseAsm(p string) []byte {
 func parseLabels(tokens []string) ([]string, map[string]byte) {
 	labels := make(map[string]byte)
 	stripped := []string{}
-	for idx, t := range tokens {
+	for _, t := range tokens {
 		if strings.HasSuffix(t, ":") {
 			l := strings.TrimSuffix(t, ":")
 			if _, ok := opNames[l]; ok {
 				panic(fmt.Sprintf("invalid label name %s", l))
 			}
-			labels[l] = byte(idx)
+			labels[l] = byte(len(stripped))
 			continue
 		}
 		stripped = append(stripped, t)

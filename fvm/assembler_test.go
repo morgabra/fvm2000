@@ -31,7 +31,27 @@ func TestParseAsm2(t *testing.T) {
 		  BNE loop
 		BRK
 	`
-	expectedBytes := []byte{9, 0, 11, 15, 18, 35, 14, 30, 17, 10, 1, 15, 6}
+	expectedBytes := []byte{9, 0, 11, 15, 18, 35, 14, 30, 17, 10, 1, 15, 6, 8}
+	out := parseAsm(p)
+
+	require.Equal(t, expectedBytes, out[:len(expectedBytes)])
+}
+
+func TestParseAsm3(t *testing.T) {
+	p := `
+		LDA 34
+		STA 15
+		LDY 35
+		loop:
+          JSR decrementY
+		  CMY 30
+          BNE loop
+		  BRK
+decrementY:
+DEY
+RTS
+	`
+	expectedBytes := []byte{9, 34, 11, 15, 18, 35, 19, 13, 14, 30, 15, 6, 8, 17, 20}
 	out := parseAsm(p)
 
 	require.Equal(t, expectedBytes, out[:len(expectedBytes)])
