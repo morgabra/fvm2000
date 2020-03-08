@@ -23,48 +23,111 @@ func parseAsm(p string) []byte {
 	}
 
 	program, labels := parseLabels(tokens)
-	compiled := make([]byte, 256)
+	compiled := make([]byte, 2048)
 
-	for idx, t := range program {
+	idx := 0
+	pc := 0
+	for pc < len(program) {
+		t := program[pc]
 		if op, ok := opNames[t]; ok {
 			compiled[idx] = op
-			continue
-		}
-
-		if loc, ok := labels[t]; ok {
+		} else if loc, ok := labels[t]; ok {
 			switch compiled[idx-1] {
-			case BNE, JSR:
-				compiled[idx] = loc
-				continue
-
 			default:
-				panic("invalid label use")
+				compiled[idx] = byte(loc & 0xFF)
+				compiled[idx+1] = byte(loc >> 8)
+				idx++
 			}
+		} else if strings.HasPrefix(t, "0X") {
+			v, err := strconv.ParseUint(t[2:], 16, 16)
+			if err != nil {
+				panic(fmt.Sprintf("invalid address: %s", t))
+			}
+
+			compiled[idx] = byte(v & 0xFF)
+			compiled[idx+1] = byte(v >> 8)
+			idx++
+		} else if strings.HasPrefix(t, "#") {
+			v, err := strconv.ParseUint(t[1:], 0, 16)
+			if err != nil {
+				panic(fmt.Sprintf("invalid literal int: %s", t))
+			}
+
+			switch program[pc-1] {
+			case "MOV":
+				compiled[idx-1] = MOVI
+
+			case "ADD":
+				compiled[idx-1] = ADDI
+
+			case "SUB":
+				compiled[idx-1] = SUBI
+
+			case "MUL":
+				compiled[idx-1] = MULI
+			}
+
+			compiled[idx] = byte(v & 0xFF)
+			compiled[idx+1] = byte(v >> 8)
+			idx++
+		} else {
+			v, err := strconv.ParseUint(t, 10, 8)
+			if err != nil {
+				panic(fmt.Sprintf("invalid number: %s", t))
+			}
+			compiled[idx] = byte(v)
 		}
 
-		v, err := strconv.ParseUint(t, 10, 8)
-		if err != nil {
-			panic(fmt.Sprintf("invalid number: %s", t))
-		}
-		compiled[idx] = byte(v)
+		pc++
+		idx++
 	}
 
 	return compiled
 }
 
-func parseLabels(tokens []string) ([]string, map[string]byte) {
-	labels := make(map[string]byte)
+func parseLabels(tokens []string) ([]string, map[string]uint16) {
+	labels := make(map[string]uint16)
+	labelOffset := 0
 	stripped := []string{}
-	for _, t := range tokens {
-		if strings.HasSuffix(t, ":") {
+	tokenCounter := 0
+	instructionsFound := false
+
+	for tokenCounter < len(tokens) {
+		t := tokens[tokenCounter]
+		if b, ok := builtins[t]; ok {
+			labels[t] = b
+			stripped = append(stripped, t)
+		} else if strings.HasSuffix(t, ":") {
 			l := strings.TrimSuffix(t, ":")
 			if _, ok := opNames[l]; ok {
-				panic(fmt.Sprintf("invalid label name %s", l))
+				panic(fmt.Sprintf("cannot use reserveed label %s", l))
 			}
-			labels[l] = byte(len(stripped))
+			if _, ok := builtins[l]; ok {
+				panic(fmt.Sprintf("cannot use reserved label: %s", l))
+			}
+			if _, ok := labels[l]; ok {
+				panic(fmt.Sprintf("label aleady defined: %s", l))
+			}
+			labels[l] = uint16(len(stripped) + labelOffset)
+			labelOffset += 2
+		} else if t == "#DEFINE" {
+			if instructionsFound {
+				panic("defines must happen before instructions")
+			}
+
+			lbl := tokens[tokenCounter+1]
+			addr, err := strconv.ParseUint(tokens[tokenCounter+2], 0, 16)
+			if err != nil {
+				panic(fmt.Sprintf("invalid address value: %s", tokens[tokenCounter+2]))
+			}
+			labels[lbl] = uint16(addr)
+			tokenCounter += 3
 			continue
+		} else {
+			stripped = append(stripped, t)
 		}
-		stripped = append(stripped, t)
+		instructionsFound = true
+		tokenCounter++
 	}
 
 	return stripped, labels

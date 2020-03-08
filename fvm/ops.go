@@ -2,10 +2,14 @@ package fvm
 
 const (
 	NOP = iota
-	MOV
-	ADD
-	SUB
-	MUL
+	MOVI
+	MOVR
+	ADDI
+	ADDR
+	SUBI
+	SUBR
+	MULI
+	MULR
 	NOT
 	DGT
 	DST
@@ -22,14 +26,23 @@ const (
 	LDY
 	JSR
 	RTS
+	JMP
+)
+
+const (
+	modeAbsolute = iota + 1
+	modeImmediate
+	modeAccumulator
+	modeZeroPage
+	modeImplicit
 )
 
 var opNames = map[string]byte{
 	"NOP":   NOP,
-	"MOV":   MOV,
-	"ADD":   ADD,
-	"SUB":   SUB,
-	"MUL":   MUL,
+	"MOV":   MOVR,
+	"ADD":   ADDR,
+	"SUB":   SUBR,
+	"MUL":   MULR,
 	"NOT":   NOT,
 	"DGT":   DGT,
 	"DST":   DST,
@@ -46,183 +59,277 @@ var opNames = map[string]byte{
 	"LDY":   LDY,
 	"JSR":   JSR,
 	"RTS":   RTS,
+	"JMP":   JMP,
 }
 
 type Op struct {
-	size   byte
-	cycles byte
+	name     string
+	size     byte
+	cycles   byte
+	readMode byte
+}
+
+type opInfo struct {
+	addr uint16
+	mode byte
+	pc   uint16
 }
 
 var ops = map[byte]Op{
 	NOP: {
-		size:   1,
-		cycles: 1,
+		name:     "NOP",
+		size:     1,
+		cycles:   1,
+		readMode: modeImplicit,
 	},
-	MOV: {
-		size:   3,
-		cycles: 1,
+	MOVR: {
+		name:     "MOV",
+		size:     5,
+		cycles:   1,
+		readMode: modeAbsolute,
 	},
-	ADD: {
-		size:   2,
-		cycles: 1,
+	MOVI: {
+		name:     "MOV",
+		size:     5,
+		cycles:   1,
+		readMode: modeImmediate,
 	},
-	SUB: {
-		size:   2,
-		cycles: 1,
+	ADDR: {
+		name:     "ADD",
+		size:     3,
+		cycles:   1,
+		readMode: modeAbsolute,
 	},
-	MUL: {
-		size:   2,
-		cycles: 1,
+	ADDI: {
+		name:     "ADD",
+		size:     3,
+		cycles:   1,
+		readMode: modeImmediate,
+	},
+	SUBR: {
+		name:     "SUB",
+		size:     3,
+		cycles:   1,
+		readMode: modeAbsolute,
+	},
+	SUBI: {
+		name:     "SUB",
+		size:     3,
+		cycles:   1,
+		readMode: modeImmediate,
+	},
+	MULR: {
+		name:     "MUL",
+		size:     3,
+		cycles:   1,
+		readMode: modeAbsolute,
+	},
+	MULI: {
+		name:     "MUL",
+		size:     3,
+		cycles:   1,
+		readMode: modeImmediate,
 	},
 	NOT: {
-		size:   1,
-		cycles: 1,
+		name:     "NOT",
+		size:     1,
+		cycles:   1,
+		readMode: modeZeroPage,
 	},
 	DGT: {
-		size:   2,
-		cycles: 1,
+		name:     "DGT",
+		size:     2,
+		cycles:   1,
+		readMode: modeImmediate,
 	},
 	DST: {
-		size:   3,
-		cycles: 1,
+		name:     "DST",
+		size:     3,
+		cycles:   1,
+		readMode: modeImmediate,
 	},
 	BRK: {
-		size:   1,
-		cycles: 1,
+		name:     "BRK",
+		size:     1,
+		cycles:   1,
+		readMode: modeZeroPage,
 	},
 	LDA: {
-		size:   2,
-		cycles: 1,
+		name:     "LDA",
+		size:     2,
+		cycles:   1,
+		readMode: modeImmediate,
 	},
 	ADC: {
-		size:   2,
-		cycles: 1,
+		name:     "ADC",
+		size:     2,
+		cycles:   1,
+		readMode: modeImmediate,
 	},
 	STA: {
-		size:   2,
-		cycles: 1,
+		name:     "STA",
+		size:     2,
+		cycles:   1,
+		readMode: modeImmediate,
 	},
 	LDX: {
-		size:   2,
-		cycles: 1,
+		name:     "LDX",
+		size:     2,
+		cycles:   1,
+		readMode: modeImmediate,
 	},
 	INX: {
-		size:   1,
-		cycles: 1,
+		name:     "INX",
+		size:     1,
+		cycles:   1,
+		readMode: modeImplicit,
 	},
 	CMY: {
-		size:   2,
-		cycles: 1,
+		name:     "CMY",
+		size:     2,
+		cycles:   1,
+		readMode: modeImmediate,
 	},
 	BNE: {
-		size:   2,
-		cycles: 1,
+		name:     "BNE",
+		size:     2,
+		cycles:   1,
+		readMode: modeAbsolute,
 	},
 	STA_X: {
-		size:   1,
-		cycles: 1,
+		name:     "STA_X",
+		size:     1,
+		cycles:   1,
+		readMode: modeImplicit,
 	},
 	DEY: {
-		size:   1,
-		cycles: 1,
+		name:     "DEY",
+		size:     1,
+		cycles:   1,
+		readMode: modeImplicit,
 	},
 	LDY: {
-		size:   2,
-		cycles: 1,
+		name:     "LDY",
+		size:     2,
+		cycles:   1,
+		readMode: modeImmediate,
 	},
 	JSR: {
-		size:   0,
-		cycles: 1,
+		name:     "JSR",
+		size:     3,
+		cycles:   1,
+		readMode: modeImmediate,
 	},
 	RTS: {
-		size:   1,
-		cycles: 1,
+		name:     "RTS",
+		size:     1,
+		cycles:   1,
+		readMode: modeImplicit,
+	},
+	JMP: {
+		name:     "JMP",
+		size:     3,
+		cycles:   1,
+		readMode: modeImmediate,
 	},
 }
 
-func (f *Fvm) brk() {
+func (f *Fvm) brk(i opInfo) {
 }
 
-func (f *Fvm) lda() {
-	f.a = f.Read(f.current() + 1)
+func (f *Fvm) lda(i opInfo) {
+	f.a = f.Read(i.addr)
 }
 
-func (f *Fvm) adc() {
-	f.a += f.Read(f.current() + 1)
+func (f *Fvm) adc(i opInfo) {
+	f.a += f.Read(i.addr)
 }
 
-func (f *Fvm) sta() {
-	f.Write(uint16(f.Read(f.current()+1)), f.a)
+func (f *Fvm) sta(i opInfo) {
+	f.Write(uint16(f.Read(i.addr)), f.a)
 }
 
-func (f *Fvm) ldx() {
-	f.x = f.Read(f.current() + 1)
+func (f *Fvm) ldx(i opInfo) {
+	f.x = f.Read(i.addr)
 }
 
-func (f *Fvm) inx() {
+func (f *Fvm) inx(i opInfo) {
 	f.x++
 }
 
-func (f *Fvm) cmy() {
-	if f.y == f.Read(f.current()+1) {
+func (f *Fvm) cmy(i opInfo) {
+	if f.y == f.Read(i.addr) {
 		f.z = 1
 	} else {
 		f.z = 0
 	}
 }
 
-func (f *Fvm) bne() {
+func (f *Fvm) bne(i opInfo) {
 	if f.z == 0 {
-		f.pc = uint16(f.Read(f.current()+1) - 2)
+		f.pc = i.addr
 		return
 	}
 }
 
-func (f *Fvm) sta_x() {
+func (f *Fvm) sta_x(i opInfo) {
 	f.Write(uint16(f.x), f.a)
 }
 
-func (f *Fvm) dey() {
+func (f *Fvm) dey(i opInfo) {
 	f.y--
 }
 
-func (f *Fvm) ldy() {
-	f.y = f.Read(f.current() + 1)
+func (f *Fvm) ldy(i opInfo) {
+	f.y = f.Read(i.addr)
 }
 
-func (f *Fvm) jsr() {
-	f.stackPush16(f.current() + 1)
-	f.pc = uint16(f.Read(f.current() + 1))
+func (f *Fvm) jsr(i opInfo) {
+	f.stackPush16(f.pc)
+	f.pc = f.Read16(i.addr)
 }
 
-func (f *Fvm) rts() {
+func (f *Fvm) rts(i opInfo) {
 	f.pc = f.stackPull16()
 }
 
-func (f *Fvm) jmp() {
-	f.pc = uint16(f.Read(f.current() + 1))
+func (f *Fvm) jmp(i opInfo) {
+	f.pc = f.Read16(i.addr)
 }
 
-func (f *Fvm) nop() {}
+func (f *Fvm) nop(i opInfo) {}
 
-func (f *Fvm) mov() {
+func (f *Fvm) mov(i opInfo) {
+	if i.mode == modeImmediate {
+		f.Write16(f.Read16(i.addr+2), f.Read16(i.addr))
+	} else if i.mode == modeAbsolute {
+		f.Write16(f.Read16(f.pc-2), f.Read16(i.addr))
+	}
 }
 
-func (f *Fvm) add() {
-	f.Write(ACC, f.Read(ACC)+f.Read(f.current()+1))
+func (f *Fvm) add(i opInfo) {
+	f.Write16(ACC, f.Read16(ACC)+f.Read16(i.addr))
 }
 
-func (f *Fvm) sub() {
+func (f *Fvm) sub(i opInfo) {
+	f.Write16(ACC, f.Read16(ACC)-f.Read16(i.addr))
 }
 
-func (f *Fvm) mul() {
+func (f *Fvm) mul(i opInfo) {
+	f.Write16(ACC, f.Read16(ACC)*f.Read16(i.addr))
 }
 
-func (f *Fvm) not() {
+func (f *Fvm) not(i opInfo) {
+	acc := f.Read16(ACC)
+	if acc == 0 {
+		f.Write16(ACC, 100)
+	} else {
+		f.Write16(ACC, 0)
+	}
 }
 
-func (f *Fvm) dgt() {
+func (f *Fvm) dgt(i opInfo) {
 }
 
-func (f *Fvm) dst() {
+func (f *Fvm) dst(i opInfo) {
 }
